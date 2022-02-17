@@ -69,16 +69,24 @@ func newCmdAddLabel(fSys filesys.FileSystem, v func(map[string]string) error) *c
 	o.mapValidator = v
 	cmd := &cobra.Command{
 		Use: "label",
-		Short: "Adds one or more commonLabels to " +
+		Short: "Adds one or more labels or commonLabels to " +
 			konfig.DefaultKustomizationFileName(),
 		Example: `
-		add label {labelKey1:labelValue1} {labelKey2:labelValue2}`,
+		# Add commonLabels (default)
+		add label {labelKey1:labelValue1} {labelKey2:labelValue2}
+
+		# Add commonLabels
+		add label --include-selectors=true {labelKey1:labelValue1} {labelKey2:labelValue2}
+
+		# Add labels
+		add label --include-selectors=false {labelKey1:labelValue1} {labelKey2:labelValue2}
+		`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return o.runE(args, fSys, o.addLabels)
 		},
 	}
 	cmd.Flags().BoolVarP(&o.force, "force", "f", false,
-		"overwrite commonLabel if it already exists",
+		"overwrite label or commonLabel if it already exists",
 	)
 	cmd.Flags().BoolVar(&o.labelsWithoutSelector, "without-selector", false,
 		"using add labels without selector option",
@@ -132,8 +140,10 @@ func (o *addMetadataOptions) addAnnotations(m *types.Kustomization) error {
 
 func (o *addMetadataOptions) addLabels(m *types.Kustomization) error {
 	if o.labelsWithoutSelector {
-		m.Labels = append(m.Labels, types.Label{Pairs: make(map[string]string), IncludeSelectors: false})
-		return o.writeToMap(m.Labels[len(m.Labels)-1].Pairs, label)
+		if m.Labels == nil {
+			m.Labels = make([]types.Label, 0)
+		}
+	    return o.writeToLabelsSlice(&m.Labels)
 	}
 	if m.CommonLabels == nil {
 		m.CommonLabels = make(map[string]string)
@@ -147,6 +157,29 @@ func (o *addMetadataOptions) writeToMap(m map[string]string, kind kindOfAdd) err
 			return fmt.Errorf("%s %s already in kustomization file", kind, k)
 		}
 		m[k] = v
+	}
+	return nil
+}
+
+func (o *addMetadataOptions) writeToLabelsSlice(klabels *[]types.Label) error {
+	for k, v := range o.metadata {
+		isPresent := false
+		for _, kl := range *klabels {
+			if _, isPresent = kl.Pairs[k]; isPresent && !o.force {
+				return fmt.Errorf("%s %s already in kustomization file", label, k)
+			} else if isPresent && o.force {
+				kl.Pairs[k] = v
+				break
+			}
+		}
+		if !isPresent {
+			*klabels = append(*klabels, types.Label{
+				Pairs: map[string]string{
+					k: v,
+				},
+				IncludeSelectors: o.includeSelectors,
+			})
+		}
 	}
 	return nil
 }

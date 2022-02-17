@@ -33,6 +33,9 @@ func NewCmdSet(
 
 	# Edits a field in an existing secret in the kustomization file
 	kustomize edit set secret my-secret --from-literal=key1=value1
+
+	# Sets the labels or commonLabels field
+	kustomize edit set label {labelKey1:labelValue1} {labelKey2:labelValue2}
 `,
 		Args: cobra.MinimumNArgs(1),
 	}
